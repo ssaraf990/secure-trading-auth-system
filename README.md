@@ -1,0 +1,182 @@
+<div align="center">
+
+# 🔐 TradeSecure
+
+### A Secure Stock Trading Simulation Platform
+
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-2.3-000000?style=flat&logo=flask&logoColor=white)](https://flask.palletsprojects.com)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Security](https://img.shields.io/badge/Security-OWASP%20Aligned-red?style=flat)](https://owasp.org)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat)](LICENSE)
+
+*Built as an Information Security project demonstrating multi-layered authentication, brute force protection, CSRF defence, and secure transaction authorisation on a real-time stock trading platform.*
+
+</div>
+
+---
+
+## 📌 Overview
+
+TradeSecure is a full-stack web application that simulates a stock trading platform with a strong focus on **application-layer security**. It implements industry-standard security patterns used by real trading platforms like Zerodha and Groww, including multi-factor authentication, transaction PIN (TPIN) authorisation, rate limiting, session management, and a live security audit log.
+
+---
+
+## ✨ Features
+
+### 🔐 Security Layer
+| Feature | Description |
+|---|---|
+| **2FA with Email OTP** | TOTP-style 6-digit OTP sent via Gmail SMTP after password login |
+| **TPIN Authorization** | Separate 6-digit Transaction PIN required before every trade — hashed with bcrypt, modelled after Zerodha's CDSL TPIN |
+| **Brute Force Protection** | Login, OTP, and TPIN endpoints lock after 5 failures — 30–60 min lockout tracked in DB |
+| **Rate Limiting** | Sliding-window per-IP rate limiter on all API endpoints (no external library) |
+| **CSRF Protection** | Flask-WTF CSRF tokens on all POST forms; `X-CSRFToken` header on all JS `fetch()` calls |
+| **Session Timeout** | 15-minute inactivity auto-logout with live countdown timer |
+| **Secure Cookies** | `HttpOnly`, `SameSite=Lax` session cookie configuration |
+| **Security Audit Log** | Every auth attempt, trade, lockout, and anomaly logged to structured JSON log files with live in-app viewer |
+
+### 📈 Trading Features
+| Feature | Description |
+|---|---|
+| **Live Stock Prices** | Real-time prices via `yfinance` with Finnhub API fallback and mock data as final fallback |
+| **Market & Limit Orders** | Market orders execute at live price; limit orders at user-specified price |
+| **Search Any Symbol** | Not limited to a fixed watchlist — search any ticker supported by yfinance |
+| **Candlestick Chart** | 30-day OHLC candlestick chart on dashboard (Chart.js Financial + yfinance history) |
+| **Portfolio P&L** | Unrealised P&L per holding with net worth graph over time |
+| **Trade History** | Full order history with order type, auth method, and amount |
+
+---
+
+## 🏗️ Architecture
+
+```
+tradesecure/
+├── app.py                    # Main Flask application (routes, auth, security)
+├── modules/
+│   ├── stocks/
+│   │   ├── stock_controller.py   # yfinance + Finnhub price fetching, trade execution
+│   │   └── stock_routes.py       # /api/stock/* Blueprint
+│   └── biometric/
+│       ├── biometric_controller.py  # WebAuthn challenge/response (mock)
+│       └── biometric_routes.py      # /api/biometric/* Blueprint
+├── security/
+│   ├── security_logger.py    # Structured JSON event logger
+│   └── threat_routes.py      # /api/threats/* Blueprint
+├── templates/                # Jinja2 HTML templates
+├── security_logs/            # Auto-generated security event logs
+└── auth_system.db            # SQLite database (auto-created)
+```
+
+### Database Tables
+```
+users              — credentials, lock status, TPIN hash
+login_attempts     — all auth attempts with IP + timestamp
+otps               — time-limited OTP codes
+wallets            — per-user INR balance
+positions          — current stock holdings
+transactions       — full trade history
+tpin_attempts      — TPIN failure tracking for lockout
+portfolio_history  — net worth snapshots for P&L graph
+watchlist          — per-user symbol watchlist
+biometric_credentials — WebAuthn credential store
+```
+
+---
+
+## 🔒 Security Design Decisions
+
+### Why a separate TPIN instead of re-using the login password?
+Real trading platforms (Zerodha, Groww) use a separate transaction PIN so that:
+1. Compromising the login password alone is not enough to execute trades
+2. The trade authorisation factor can be independently rate-limited and locked
+3. The principle of **defence in depth** — multiple independent barriers
+
+### How brute force protection works
+Three separate lockout systems, each tracked independently:
+- **Login** — 5 failures on username+IP in 15 min → 60 min account lock
+- **OTP** — 5 failures → 60 min account lock
+- **TPIN** — 5 failures in 30 min → 30 min TPIN lock
+
+### CSRF protection
+All state-changing forms include a `csrf_token` hidden input generated by Flask-WTF. JavaScript `fetch()` calls attach an `X-CSRFToken` header automatically via a fetch wrapper in `base.html`. JSON API endpoints are explicitly exempted since they rely on session authentication instead.
+
+### Rate limiting
+A custom in-memory sliding window rate limiter (no Redis required) tracks requests per IP per endpoint. Limits: 30 req/min on price APIs, 10 req/min on TPIN verify, 20 req/min on market data.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.10+
+- pip
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/tradesecure.git
+cd tradesecure
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your Gmail App Password and a random SECRET_KEY
+```
+
+### Configuration (`.env`)
+```env
+SECRET_KEY=your-long-random-secret-key
+EMAIL_ADDRESS=youremail@gmail.com
+EMAIL_PASSWORD=your-16-char-gmail-app-password
+DEV_PIN=123456
+```
+
+> **Gmail App Password**: Go to Google Account → Security → 2-Step Verification → App Passwords → Generate one for "Mail"
+
+### Run
+```bash
+python app.py
+```
+Open [http://localhost:5001](http://localhost:5001)
+
+### First steps
+1. Register an account
+2. Log in — OTP will be sent to your email (or shown in terminal if email not configured)
+3. Go to **TPIN** in the navbar and set your 6-digit Transaction PIN
+4. Go to **Trade** and place your first order
+
+---
+
+## 📸 Screenshots
+
+> *Add screenshots here after running the app*
+
+| Login + 2FA | Dashboard + Candlestick | Trade with TPIN | Security Audit Log |
+|---|---|---|---|
+| ![Login](docs/screenshots/login.png) | ![Dashboard](docs/screenshots/dashboard.png) | ![Trade](docs/screenshots/trade.png) | ![Audit](docs/screenshots/audit.png) |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Backend**: Python, Flask, SQLite
+- **Auth**: Flask-WTF (CSRF), Werkzeug (password hashing), custom OTP + TPIN system
+- **Data**: yfinance (live stock prices), Finnhub API (fallback)
+- **Frontend**: Bootstrap 5, Chart.js + chartjs-chart-financial, Font Awesome
+- **Security Logging**: Custom structured JSON logger
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+Built with Flask · Secured with OWASP principles · Live prices via yfinance
+</div>

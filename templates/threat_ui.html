@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Threat Model Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3><i class="fas fa-shield-alt me-2"></i>Microsoft STRIDE Threat Model</h3>
+                <div>
+                    <button id="exportJson" class="btn btn-outline-primary btn-sm me-2">
+                        <i class="fas fa-download me-1"></i>Export JSON
+                    </button>
+                    <button id="exportPdf" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-file-pdf me-1"></i>Export PDF
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    This dashboard displays identified security threats using Microsoft's STRIDE framework.
+                </div>
+                
+                <!-- STRIDE Categories -->
+                <div class="row mb-4">
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #dc2626; color: white;">
+                            <div class="card-body">
+                                <h5><strong>S</strong></h5>
+                                <p class="mb-0">Spoofing</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #ea580c; color: white;">
+                            <div class="card-body">
+                                <h5><strong>T</strong></h5>
+                                <p class="mb-0">Tampering</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #ca8a04; color: white;">
+                            <div class="card-body">
+                                <h5><strong>R</strong></h5>
+                                <p class="mb-0">Repudiation</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #2563eb; color: white;">
+                            <div class="card-body">
+                                <h5><strong>I</strong></h5>
+                                <p class="mb-0">Information Disclosure</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #7c3aed; color: white;">
+                            <div class="card-body">
+                                <h5><strong>D</strong></h5>
+                                <p class="mb-0">Denial of Service</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card text-center" style="background: #059669; color: white;">
+                            <div class="card-body">
+                                <h5><strong>E</strong></h5>
+                                <p class="mb-0">Elevation of Privilege</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Threat Table -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Component</th>
+                                <th>STRIDE Category</th>
+                                <th>Threat</th>
+                                <th>Severity</th>
+                                <th>Mitigation</th>
+                            </tr>
+                        </thead>
+                        <tbody id="threatTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Loading threats...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Components Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-cubes me-2"></i>Components Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="componentsGrid">
+                    <div class="col-12 text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading components...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let threatModelData = null;
+
+// Load threat model
+async function loadThreatModel() {
+    try {
+        const response = await fetch('/api/threats/', { credentials: 'same-origin' });
+        const data = await response.json();
+        
+        if (data.success) {
+            threatModelData = data.threat_model;
+            renderThreatTable(data.threat_model);
+            renderComponents(data.threat_model.components);
+        }
+    } catch (error) {
+        console.error('Error loading threat model:', error);
+        document.getElementById('threatTableBody').innerHTML = 
+            '<tr><td colspan="5" class="text-center text-danger">Error loading threat model</td></tr>';
+    }
+}
+
+// Render threat table
+function renderThreatTable(threatModel) {
+    const tbody = document.getElementById('threatTableBody');
+    const stride = threatModel.stride_categories || {};
+    
+    let rows = [];
+    const categories = ['Spoofing', 'Tampering', 'Repudiation', 'InformationDisclosure', 'DenialOfService', 'ElevationOfPrivilege'];
+    
+    categories.forEach(category => {
+        const threats = stride[category] || [];
+        threats.forEach(threat => {
+            const severityColor = {
+                'High': 'danger',
+                'Medium': 'warning',
+                'Low': 'info'
+            }[threat.severity] || 'secondary';
+            
+            rows.push(`
+                <tr>
+                    <td><strong>${threat.component}</strong></td>
+                    <td><span class="badge bg-${severityColor}">${category}</span></td>
+                    <td>${threat.threat}</td>
+                    <td><span class="badge bg-${severityColor}">${threat.severity}</span></td>
+                    <td><small>${threat.mitigation}</small></td>
+                </tr>
+            `);
+        });
+    });
+    
+    tbody.innerHTML = rows.length > 0 ? rows.join('') : 
+        '<tr><td colspan="5" class="text-center text-muted">No threats found</td></tr>';
+}
+
+// Render components
+function renderComponents(components) {
+    const grid = document.getElementById('componentsGrid');
+    const componentNames = Object.keys(components || {});
+    
+    if (componentNames.length === 0) {
+        grid.innerHTML = '<div class="col-12 text-center text-muted">No components found</div>';
+        return;
+    }
+    
+    grid.innerHTML = componentNames.map(name => {
+        const component = components[name];
+        const threats = Object.keys(component).filter(k => k !== 'Mitigation');
+        
+        return `<div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6><strong>${name}</strong></h6>
+                    <ul class="list-unstyled mb-0">
+                        ${threats.map(threat => `
+                            <li class="mb-2">
+                                <strong>${threat}:</strong> ${component[threat]}<br>
+                                <small class="text-muted"><strong>Mitigation:</strong> ${component.Mitigation || 'N/A'}</small>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// Export JSON
+document.getElementById('exportJson').addEventListener('click', () => {
+    if (!threatModelData) {
+        alert('Threat model not loaded');
+        return;
+    }
+    
+    const dataStr = JSON.stringify(threatModelData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'threat_model.json';
+    link.click();
+    URL.revokeObjectURL(url);
+});
+
+// Export PDF (simple text-based)
+document.getElementById('exportPdf').addEventListener('click', () => {
+    alert('PDF export would require a library like jsPDF. For now, use the JSON export or print this page.');
+    window.print();
+});
+
+// Initial load
+loadThreatModel();
+</script>
+{% endblock %}

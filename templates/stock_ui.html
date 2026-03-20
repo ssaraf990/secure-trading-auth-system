@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}Live Stock Trading{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3><i class="fas fa-chart-line me-2"></i>Live Stock Prices</h3>
+                <div>
+                    <span class="badge bg-success me-2">Wallet: ₹<span id="walletBalance">0.00</span></span>
+                    <button id="refreshPrices" class="btn btn-primary btn-sm">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row" id="stockCards">
+                    <div class="col-12 text-center" style="color: #8b949e !important;">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading stock prices...
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-exchange-alt me-2"></i>Trade Stock</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="tradeForm">
+                            <div class="mb-3">
+                                <label class="form-label">Symbol</label>
+                                <input type="text" id="tradeSymbol" class="form-control" placeholder="e.g., AAPL" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Quantity</label>
+                                <input type="number" id="tradeQty" class="form-control" min="1" value="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Action</label>
+                                <select id="tradeSide" class="form-select" required>
+                                    <option value="BUY">Buy</option>
+                                    <option value="SELL">Sell</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Price (₹)</label>
+                                <input type="number" id="tradePrice" class="form-control" step="0.01" required>
+                                <small class="text-muted">Current price will be fetched automatically</small>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-check me-2"></i>Execute Trade
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-history me-2"></i>Transaction History</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover" style="color: #e6edf3 !important;">
+                                <thead>
+                                    <tr style="background-color: #0d1117;">
+                                        <th style="color: #e6edf3 !important;">Symbol</th>
+                                        <th style="color: #e6edf3 !important;">Side</th>
+                                        <th style="color: #e6edf3 !important;">Qty</th>
+                                        <th style="color: #e6edf3 !important;">Price</th>
+                                        <th style="color: #e6edf3 !important;">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transactionHistory">
+                                    <tr>
+                                        <td colspan="5" class="text-center" style="color: #8b949e !important;">No transactions yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Biometric Verification Modal -->
+<div id="biometricModal" class="modal fade" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background: #161b22; border: 1px solid #30363d;">
+            <div class="modal-header" style="border-bottom: 1px solid #30363d;">
+                <h5 class="modal-title"><i class="fas fa-shield-alt me-2"></i>Verify Transaction</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>Please verify your identity to execute trade
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" id="useBiometricTrade">
+                        <i class="fas fa-fingerprint me-2"></i>Use Biometric
+                    </button>
+                    <button class="btn btn-outline-secondary" id="usePasswordTrade">
+                        <i class="fas fa-key me-2"></i>Use Password
+                    </button>
+                </div>
+                <div id="passwordSectionTrade" style="display: none; margin-top: 15px;">
+                    <label class="form-label">Enter Your Password</label>
+                    <input type="password" class="form-control" id="passwordInputTrade" placeholder="Password">
+                    <button class="btn btn-success mt-2 w-100" id="submitPasswordTrade">
+                        <i class="fas fa-check me-2"></i>Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trade Success Modal -->
+<div id="tradeSuccessModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background: #161b22; border: 1px solid #30363d;">
+            <div class="modal-body text-center py-5">
+                <div style="font-size: 64px; color: #16a34a; margin-bottom: 20px;">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h4 class="text-success mb-3">Trade Executed Successfully! ✅</h4>
+                <p id="tradeDetails" class="text-muted"></p>
+                <button type="button" class="btn btn-primary mt-3" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const popularSymbols = ['AAPL', 'TSLA', 'GOOGL', 'AMZN', 'MSFT', 'NFLX', 'NVDA', 'META'];
+
+// Load wallet balance
+async function loadBalance() {
+    try {
+        const response = await fetch('/api/stock/balance', { credentials: 'same-origin' });
+        const data = await response.json();
+        if (data.success) {
+            document.getElementById('walletBalance').textContent = data.balance_inr.toFixed(2);
+        }
+    } catch (error) {
+        console.error('Error loading balance:', error);
+    }
+}
+
+// Load stock prices
+async function loadStockPrices() {
+    const cardsContainer = document.getElementById('stockCards');
+        cardsContainer.innerHTML = '<div class="col-12 text-center" style="color: #8b949e !important;"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</div>';
+    
+    try {
+        const promises = popularSymbols.map(symbol => 
+            fetch(`/api/stock/price/${symbol}`, { credentials: 'same-origin' })
+                .then(r => r.json())
+        );
+        
+        const results = await Promise.all(promises);
+        
+        cardsContainer.innerHTML = results.map(result => {
+            if (!result.success) {
+                return `<div class="col-md-3 mb-3">
+                    <div class="card">
+                        <div class="card-body" style="color: #e6edf3 !important;">
+                            <h6 style="color: #e6edf3 !important;">${result.symbol || 'N/A'}</h6>
+                            <p class="mb-0" style="color: #dc2626 !important;">Error loading</p>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            
+            const changeClass = result.change_percent >= 0 ? 'text-success' : 'text-danger';
+            const changeIcon = result.change_percent >= 0 ? 'fa-caret-up' : 'fa-caret-down';
+            
+            return `<div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body" style="color: #e6edf3 !important;">
+                        <h6 style="color: #e6edf3 !important;"><strong style="color: #f59e0b !important;">${result.symbol}</strong></h6>
+                        <h4 class="mb-2" style="color: #e6edf3 !important;">₹${result.price.toFixed(2)}</h4>
+                        <p class="mb-0 ${changeClass}" style="font-weight: 600;">
+                            <i class="fas ${changeIcon} me-1"></i>
+                            ${result.change_percent.toFixed(2)}%
+                        </p>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="setTradeSymbol('${result.symbol}', ${result.price})">
+                            Trade
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (error) {
+        cardsContainer.innerHTML = `<div class="col-12 text-center" style="color: #dc2626 !important;">Error loading prices: ${error.message}</div>`;
+    }
+}
+
+// Set trade symbol and price
+function setTradeSymbol(symbol, price) {
+    document.getElementById('tradeSymbol').value = symbol;
+    document.getElementById('tradePrice').value = price.toFixed(2);
+}
+
+// Load transaction history
+async function loadHistory() {
+    try {
+        const response = await fetch('/api/stock/history?limit=10', { credentials: 'same-origin' });
+        const data = await response.json();
+        
+        const tbody = document.getElementById('transactionHistory');
+        if (data.success && data.transactions.length > 0) {
+            tbody.innerHTML = data.transactions.map(tx => `
+                <tr style="color: #e6edf3 !important;">
+                    <td style="color: #e6edf3 !important;"><strong style="color: #f59e0b !important;">${tx.symbol}</strong></td>
+                    <td><span class="badge ${tx.side === 'BUY' ? 'bg-success' : 'bg-danger'}" style="color: #ffffff !important;">${tx.side}</span></td>
+                    <td style="color: #e6edf3 !important;">${tx.qty}</td>
+                    <td style="color: #e6edf3 !important;">₹${tx.price.toFixed(2)}</td>
+                    <td style="color: #8b949e !important;"><small>${new Date(tx.tx_time).toLocaleString()}</small></td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="color: #8b949e !important;">No transactions yet</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading history:', error);
+    }
+}
+
+// Handle trade form submission
+let pendingTradeData = null;
+let bioModal = null;
+
+document.getElementById('tradeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Store trade data
+    pendingTradeData = {
+        symbol: document.getElementById('tradeSymbol').value.toUpperCase(),
+        qty: parseInt(document.getElementById('tradeQty').value),
+        price: parseFloat(document.getElementById('tradePrice').value),
+        side: document.getElementById('tradeSide').value
+    };
+    
+    // Show verification modal
+    bioModal = new bootstrap.Modal(document.getElementById('biometricModal'));
+    bioModal.show();
+});
+
+// Biometric verification
+document.getElementById('useBiometricTrade').addEventListener('click', async () => {
+    try {
+        const challengeRes = await fetch('/api/biometric/challenge', { credentials: 'same-origin' });
+        const challengeData = await challengeRes.json();
+        
+        if (!challengeData.success) {
+            alert('Failed to get challenge');
+            return;
+        }
+        
+        const pin = prompt('Enter your 6-digit DEV PIN');
+        
+        if (!pin || pin.length !== 6) {
+            alert('Invalid PIN');
+            return;
+        }
+        
+        const assertRes = await fetch('/api/biometric/assert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                credential_id: 'pin_fallback',
+                signature: pin,
+                challenge: challengeData.challenge
+            })
+        });
+        
+        const assertData = await assertRes.json();
+        if (assertData.success) {
+            bioModal.hide();
+            await executeTrade();
+        } else {
+            alert('Biometric verification failed: ' + (assertData.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Verification error: ' + error.message);
+    }
+});
+
+// Password verification
+document.getElementById('usePasswordTrade').addEventListener('click', () => {
+    document.getElementById('passwordSectionTrade').style.display = 'block';
+});
+
+document.getElementById('submitPasswordTrade').addEventListener('click', async () => {
+    const password = document.getElementById('passwordInputTrade').value;
+    
+    if (!password) {
+        alert('Please enter your password');
+        return;
+    }
+    
+    try {
+        // Verify password by attempting to get user info
+        const response = await fetch('/api/stock/verify-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ password: password })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            bioModal.hide();
+            await executeTrade();
+        } else {
+            alert('Invalid password');
+        }
+    } catch (error) {
+        alert('Verification error: ' + error.message);
+    }
+});
+
+async function executeTrade() {
+    if (!pendingTradeData) return;
+    
+    const { symbol, qty, price, side } = pendingTradeData;
+    
+    try {
+        // Execute trade
+        const tradeRes = await fetch('/api/stock/trade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ symbol, qty, price, side })
+        });
+        
+        const tradeData = await tradeRes.json();
+        if (tradeData.success) {
+            document.getElementById('tradeDetails').textContent = tradeData.message;
+            const successModal = new bootstrap.Modal(document.getElementById('tradeSuccessModal'));
+            successModal.show();
+            
+            // Refresh data
+            loadBalance();
+            loadHistory();
+            loadStockPrices();
+            
+            // Reset form
+            document.getElementById('tradeForm').reset();
+            pendingTradeData = null;
+        } else {
+            alert('Trade failed: ' + tradeData.error);
+        }
+    } catch (error) {
+        alert('Error executing trade: ' + error.message);
+    }
+}
+
+// Refresh prices button
+document.getElementById('refreshPrices').addEventListener('click', loadStockPrices);
+
+// Auto-refresh every 30 seconds
+setInterval(loadStockPrices, 30000);
+
+// Initial load
+loadBalance();
+loadStockPrices();
+loadHistory();
+</script>
+{% endblock %}

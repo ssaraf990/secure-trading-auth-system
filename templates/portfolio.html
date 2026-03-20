@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}My Portfolio - TradeSecure{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h3 class="mb-0"><i class="fas fa-briefcase me-2"></i>My Portfolio</h3>
+                <div>
+                    <span class="badge me-2" style="background:#30363d; color:#f59e0b;">
+                        <i class="fas fa-wallet me-1"></i>Wallet: ₹{{ '%.2f'|format(wallet_inr) }}
+                    </span>
+                    <span class="badge" style="background:#1d4ed8; color:#fff;">
+                        Net Worth: ₹{{ '%.2f'|format(net_worth) }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr style="background:#0d1117;">
+                                <th>Symbol</th>
+                                <th class="text-end">Shares</th>
+                                <th class="text-end">Avg Cost (₹)</th>
+                                <th class="text-end">Live Price (₹)</th>
+                                <th class="text-end">Value (₹)</th>
+                                <th class="text-end">P&L</th>
+                                <th>Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if holdings %}
+                                {% for h in holdings %}
+                                <tr>
+                                    <td><strong style="color:#f59e0b;">{{ h.symbol }}</strong></td>
+                                    <td class="text-end">{{ h.shares }}</td>
+                                    <td class="text-end">₹{{ '%.2f'|format(h.avg_price) }}</td>
+                                    <td class="text-end">₹{{ '%.2f'|format(h.price) }}</td>
+                                    <td class="text-end">₹{{ '%.2f'|format(h.value) }}</td>
+                                    <td class="text-end {% if h.pnl >= 0 %}text-gain{% else %}text-loss{% endif %}" style="font-weight:600;">
+                                        {% if h.pnl >= 0 %}+{% endif %}₹{{ '%.2f'|format(h.pnl) }}
+                                        <small>({% if h.pnl_pct >= 0 %}+{% endif %}{{ '%.2f'|format(h.pnl_pct) }}%)</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="font-size:0.7em; background:{% if h.source == 'yfinance' %}#166534{% else %}#78350f{% endif %}; color:#fff;">
+                                            {% if h.source == 'yfinance' %}🟢 Live{% else %}🟡 Mock{% endif %}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5" style="color:#8b949e;">
+                                        <i class="fas fa-briefcase fa-3x mb-3 d-block" style="opacity:0.2;"></i>
+                                        No holdings yet. <a href="{{ url_for('transactions') }}">Start trading!</a>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                        {% if holdings %}
+                        <tfoot>
+                            <tr style="background:#0d1117;">
+                                <th colspan="4" class="text-end" style="color:#8b949e;">Total Holdings Value</th>
+                                <th class="text-end" style="color:#f59e0b;">₹{{ '%.2f'|format(total_value) }}</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
+                    </table>
+                </div>
+                {% if holdings %}
+                <div class="p-3" style="color:#8b949e; font-size:0.8em;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Prices refreshed from yfinance (live) or mock fallback. P&L = current value vs average cost.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Summary Card -->
+        <div class="card mb-3">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Summary</h5></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span style="color:#8b949e;">Holdings Value</span>
+                    <span style="color:#e6edf3; font-weight:600;">₹{{ '%.2f'|format(total_value) }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span style="color:#8b949e;">Wallet Balance</span>
+                    <span style="color:#e6edf3; font-weight:600;">₹{{ '%.2f'|format(wallet_inr) }}</span>
+                </div>
+                <hr style="border-color:#30363d;">
+                <div class="d-flex justify-content-between">
+                    <span style="color:#8b949e;">Net Worth</span>
+                    <span style="color:#f59e0b; font-weight:700; font-size:1.1em;">₹{{ '%.2f'|format(net_worth) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- P&L History Graph -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2" style="color:#f59e0b;"></i>Net Worth Over Time</h5>
+            </div>
+            <div class="card-body">
+                {% if pnl_history and pnl_history|length > 1 %}
+                <canvas id="pnlChart" style="max-height:200px;"></canvas>
+                {% else %}
+                <div class="text-center py-3" style="color:#8b949e; font-size:0.9em;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Make a few trades to see your P&L graph here.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Allocation Chart -->
+        {% if holdings %}
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Allocation</h5></div>
+            <div class="card-body">
+                <canvas id="portfolioChart" style="max-height:240px;"></canvas>
+                <div id="legendContainer" class="mt-3" style="font-size:0.85em;"></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if holdings %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const holdings = {{ holdings|tojson }};
+const labels = holdings.map(h => h.symbol);
+const data   = holdings.map(h => h.value);
+const colors = ['#f59e0b','#3b82f6','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16'];
+
+new Chart(document.getElementById('portfolioChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+        labels,
+        datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderColor: '#161b22', borderWidth: 3 }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#161b22', titleColor: '#e6edf3', bodyColor: '#e6edf3',
+                borderColor: '#30363d', borderWidth: 1,
+                callbacks: {
+                    label: ctx => `${ctx.label}: ₹${ctx.parsed.toFixed(2)} (${((ctx.parsed / ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)`
+                }
+            }
+        }
+    }
+});
+
+const total = data.reduce((a,b) => a+b, 0);
+const legend = document.getElementById('legendContainer');
+holdings.forEach((h, i) => {
+    const pct = ((h.value / total) * 100).toFixed(1);
+    const div = document.createElement('div');
+    div.className = 'd-flex align-items-center justify-content-between mb-1';
+    div.innerHTML = `
+        <div class="d-flex align-items-center">
+            <span style="display:inline-block;width:10px;height:10px;background:${colors[i]};border-radius:2px;margin-right:8px;"></span>
+            <span style="color:#e6edf3;">${h.symbol}</span>
+        </div>
+        <span style="color:#8b949e;">${pct}%</span>`;
+    legend.appendChild(div);
+});
+</script>
+{% endif %}
+
+{% if pnl_history and pnl_history|length > 1 %}
+<script>
+const pnlData = {{ pnl_history|tojson }};
+const pnlLabels = pnlData.map(d => d.recorded_at.slice(0,16).replace('T',' '));
+const pnlValues = pnlData.map(d => d.net_worth);
+const startVal  = pnlValues[0];
+
+// Colour: green if ending higher than start, red if lower
+const endVal    = pnlValues[pnlValues.length - 1];
+const lineColor = endVal >= startVal ? '#16a34a' : '#dc2626';
+const fillColor = endVal >= startVal ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)';
+
+new Chart(document.getElementById('pnlChart').getContext('2d'), {
+    type: 'line',
+    data: {
+        labels: pnlLabels,
+        datasets: [{
+            label: 'Net Worth (₹)',
+            data: pnlValues,
+            borderColor: lineColor,
+            backgroundColor: fillColor,
+            borderWidth: 2,
+            pointRadius: pnlValues.length < 15 ? 4 : 2,
+            pointBackgroundColor: lineColor,
+            fill: true,
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#161b22',
+                titleColor: '#e6edf3',
+                bodyColor: '#f59e0b',
+                borderColor: '#30363d',
+                borderWidth: 1,
+                callbacks: {
+                    label: ctx => '₹' + ctx.parsed.y.toLocaleString('en-IN', {minimumFractionDigits:2})
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { color: '#21262d' },
+                ticks: { color: '#8b949e', maxTicksLimit: 6, maxRotation: 0 }
+            },
+            y: {
+                grid: { color: '#21262d' },
+                ticks: {
+                    color: '#8b949e',
+                    callback: v => '₹' + (v/1000).toFixed(0) + 'k'
+                }
+            }
+        }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

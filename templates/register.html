@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Register - Two-Factor Authentication System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center">
+                <h3><i class="fas fa-user-plus me-2"></i>Create Account</h3>
+                <p class="mb-0" style="color: #8b949e !important;">Join our secure authentication system</p>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" id="registerForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user me-1"></i>Username
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                        <div class="form-text">Choose a unique username</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">
+                            <i class="fas fa-envelope me-1"></i>Email Address
+                        </label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                        <div class="form-text">We'll send OTP codes to this email</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock me-1"></i>Password
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                        <div class="form-text">Minimum 6 characters</div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="confirm_password" class="form-label">
+                            <i class="fas fa-lock me-1"></i>Confirm Password
+                        </label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                    </div>
+                    
+                    <!-- Biometric Registration -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableBiometric" style="background-color: #0d1117; border-color: #30363d;">
+                            <label class="form-check-label" for="enableBiometric" style="color: #e6edf3 !important;">
+                                <i class="fas fa-fingerprint me-1"></i>Enable Biometric Authentication (Fingerprint)
+                            </label>
+                        </div>
+                        <div id="biometricRegisterStatus" class="mt-2" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="registerBtn">
+                            <i class="fas fa-user-plus me-2"></i>Create Account
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="text-muted">Already have an account? 
+                        <a href="{{ url_for('login') }}" class="text-decoration-none">Login here</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Check WebAuthn support
+const isWebAuthnSupported = window.PublicKeyCredential !== undefined;
+let biometricCredentialId = null;
+
+if (!isWebAuthnSupported) {
+    document.getElementById('enableBiometric').disabled = true;
+    document.getElementById('enableBiometric').parentElement.innerHTML += '<br><small class="text-warning">Biometric authentication not supported in your browser</small>';
+}
+
+// Password confirmation validation
+document.getElementById('confirm_password').addEventListener('input', function() {
+    const password = document.getElementById('password').value;
+    const confirmPassword = this.value;
+    
+    if (password !== confirmPassword) {
+        this.setCustomValidity('Passwords do not match');
+    } else {
+        this.setCustomValidity('');
+    }
+});
+
+// Handle biometric registration checkbox
+document.getElementById('enableBiometric').addEventListener('change', async function() {
+    const statusDiv = document.getElementById('biometricRegisterStatus');
+    
+    if (this.checked) {
+        if (!isWebAuthnSupported) {
+            this.checked = false;
+            statusDiv.innerHTML = '<div class="alert alert-warning">Your browser does not support WebAuthn.</div>';
+            statusDiv.style.display = 'block';
+            return;
+        }
+        
+        statusDiv.innerHTML = '<p class="text-info"><i class="fas fa-info-circle me-1"></i>You will register your fingerprint after account creation.</p>';
+        statusDiv.style.display = 'block';
+    } else {
+        statusDiv.style.display = 'none';
+        biometricCredentialId = null;
+    }
+});
+
+// Handle form submission
+document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    const enableBiometric = document.getElementById('enableBiometric').checked;
+    
+    if (enableBiometric && isWebAuthnSupported) {
+        e.preventDefault();
+        
+        const statusDiv = document.getElementById('biometricRegisterStatus');
+        const btn = document.getElementById('registerBtn');
+        
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Registering Biometric...';
+        statusDiv.innerHTML = '<p class="text-info"><i class="fas fa-fingerprint me-1"></i>Please use your fingerprint scanner to register...</p>';
+        
+        try {
+            // First, submit the registration form data
+            const formData = new FormData(this);
+            formData.append('register_biometric', 'true');
+            
+            // Get registration options from server
+            const regRes = await fetch('/api/biometric/register-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('username').value,
+                    email: document.getElementById('email').value
+                })
+            });
+            
+            const regData = await regRes.json();
+            
+            if (!regData.success) {
+                throw new Error(regData.error || 'Failed to get registration options');
+            }
+            
+            // Decode base64url challenge
+            function base64urlToUint8Array(base64url) {
+                const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return bytes;
+            }
+            
+            // Create credential with WebAuthn - will use platform authenticator
+            const challengeBytes = base64urlToUint8Array(regData.challenge);
+            const userIdBytes = new TextEncoder().encode(regData.user_id);
+            
+            const userEmail = document.getElementById('email').value;
+            const username = document.getElementById('username').value;
+            
+            // WebAuthn options that force platform authenticator (fingerprint scanner)
+            const publicKeyCredentialCreationOptions = {
+                challenge: challengeBytes,
+                rp: {
+                    name: "IS Lab Project",
+                    id: regData.rp?.id || window.location.hostname
+                },
+                user: {
+                    id: userIdBytes,
+                    name: userEmail,  // Use email as the primary identifier
+                    displayName: username
+                },
+                pubKeyCredParams: [
+                    { alg: -7, type: "public-key" },   // ES256
+                    { alg: -257, type: "public-key" } // RS256
+                ],
+                authenticatorSelection: {
+                    authenticatorAttachment: "platform",  // FORCE built-in fingerprint scanner only
+                    userVerification: "required",
+                    requireResidentKey: false
+                },
+                timeout: 60000,
+                attestation: "none"  // Avoid extra prompts, just use existing platform authenticator
+            };
+            
+            statusDiv.innerHTML = '<p class="text-info"><i class="fas fa-fingerprint me-1"></i>Using your fingerprint scanner registered to ' + userEmail + '...</p>';
+            
+            // This will automatically use the platform authenticator (fingerprint) 
+            // that's already registered to the user's email/Windows account
+            const credential = await navigator.credentials.create({
+                publicKey: publicKeyCredentialCreationOptions
+            });
+            
+            // Store credential ID for form submission
+            biometricCredentialId = credential.id;
+            
+            // Now submit the form with biometric data
+            const submitForm = document.createElement('form');
+            submitForm.method = 'POST';
+            submitForm.style.display = 'none';
+            
+            for (const [key, value] of formData.entries()) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = value;
+                submitForm.appendChild(input);
+            }
+            
+            // Add biometric credential data
+            const bioInput = document.createElement('input');
+            bioInput.type = 'hidden';
+            bioInput.name = 'biometric_credential_id';
+            bioInput.value = credential.id;
+            submitForm.appendChild(bioInput);
+            
+            document.body.appendChild(submitForm);
+            submitForm.submit();
+            
+        } catch (error) {
+            console.error('Biometric registration error:', error);
+            statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message || 'Biometric registration failed. You can still register without biometric.'}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+            
+            // Allow form to submit normally without biometric
+            setTimeout(() => {
+                this.submit();
+            }, 2000);
+        }
+    }
+    // If biometric not enabled, form submits normally
+});
+</script>
+{% endblock %}

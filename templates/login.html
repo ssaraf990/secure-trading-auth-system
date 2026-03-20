@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Two-Factor Authentication System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center">
+                <h3><i class="fas fa-sign-in-alt me-2"></i>Login to Your Account</h3>
+                <p class="mb-0" style="color: #8b949e !important;">Enter your credentials or use biometric authentication</p>
+            </div>
+            <div class="card-body p-4">
+                <!-- Biometric Login Option -->
+                <div class="mb-4 text-center">
+                    <button type="button" id="biometricLoginBtn" class="btn btn-outline-primary btn-lg w-100" style="border-color: #f59e0b; color: #f59e0b;">
+                        <i class="fas fa-fingerprint me-2"></i>Login with Fingerprint
+                    </button>
+                    <div id="biometricStatus" class="mt-2" style="display: none;"></div>
+                </div>
+                
+                <div class="text-center mb-3">
+                    <hr style="border-color: #30363d;">
+                    <span class="text-muted">OR</span>
+                    <hr style="border-color: #30363d;">
+                </div>
+                
+                <!-- Traditional Login Form -->
+                <form method="POST" id="loginForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user me-1"></i>Username
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username" required autofocus>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock me-1"></i>Password
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-sign-in-alt me-2"></i>Login with Password
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="text-muted">Don't have an account? 
+                        <a href="{{ url_for('register') }}" class="text-decoration-none">Register here</a>
+                    </p>
+                </div>
+                
+                <div class="alert alert-info mt-3" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Security Notice:</strong> After successful login, you'll receive an OTP code via email for two-factor authentication.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Check WebAuthn support
+const isWebAuthnSupported = window.PublicKeyCredential !== undefined;
+
+if (!isWebAuthnSupported) {
+    document.getElementById('biometricLoginBtn').disabled = true;
+    document.getElementById('biometricLoginBtn').innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Biometric Not Supported';
+    document.getElementById('biometricLoginBtn').classList.remove('btn-outline-primary');
+    document.getElementById('biometricLoginBtn').classList.add('btn-outline-secondary');
+}
+
+// Biometric Login
+document.getElementById('biometricLoginBtn').addEventListener('click', async () => {
+    const statusDiv = document.getElementById('biometricStatus');
+    const btn = document.getElementById('biometricLoginBtn');
+    
+    if (!isWebAuthnSupported) {
+        statusDiv.innerHTML = '<div class="alert alert-warning">Your browser does not support WebAuthn. Please use password login.</div>';
+        statusDiv.style.display = 'block';
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Scanning...';
+    statusDiv.innerHTML = '<p class="text-info"><i class="fas fa-info-circle me-1"></i>Please use your fingerprint scanner...</p>';
+    statusDiv.style.display = 'block';
+    
+    try {
+        // Get challenge from server
+        const challengeRes = await fetch('/api/biometric/challenge');
+        const challengeData = await challengeRes.json();
+        
+        if (!challengeData.success) {
+            throw new Error('Failed to get challenge');
+        }
+        
+        // Decode base64url challenge to Uint8Array
+        function base64urlToUint8Array(base64url) {
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+        
+        // Force platform authenticator (built-in fingerprint scanner)
+        const challengeBytes = base64urlToUint8Array(challengeData.challenge);
+        const publicKeyCredentialRequestOptions = {
+            challenge: challengeBytes,
+            allowCredentials: [], // Empty means any registered credential for this domain
+            timeout: 60000,
+            userVerification: 'required',
+            // Force platform authenticator (no QR code or external keys)
+            // The browser will automatically use the fingerprint scanner registered to the email
+        };
+        
+        // Request biometric authentication - this will use the platform authenticator
+        // (fingerprint scanner) that's already registered to the user's email/account
+        const assertion = await navigator.credentials.get({
+            publicKey: publicKeyCredentialRequestOptions
+        });
+        
+        // Send assertion to server for verification
+        const verifyRes = await fetch('/api/biometric/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                credential_id: assertion.id,
+                raw_id: Array.from(new Uint8Array(assertion.rawId)),
+                response: {
+                    authenticator_data: Array.from(new Uint8Array(assertion.response.authenticatorData)),
+                    client_data_json: Array.from(new Uint8Array(assertion.response.clientDataJSON)),
+                    signature: Array.from(new Uint8Array(assertion.response.signature)),
+                    user_handle: assertion.response.userHandle ? Array.from(new Uint8Array(assertion.response.userHandle)) : null
+                },
+                challenge: challengeData.challenge
+            })
+        });
+        
+        const verifyData = await verifyRes.json();
+        
+        if (verifyData.success) {
+            statusDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Biometric verified! Redirecting...</div>';
+            // Redirect to OTP verification or dashboard
+            if (verifyData.requires_otp) {
+                window.location.href = '/verify-otp';
+            } else {
+                window.location.href = '/dashboard';
+            }
+        } else {
+            throw new Error(verifyData.error || 'Biometric verification failed');
+        }
+        
+    } catch (error) {
+        console.error('Biometric login error:', error);
+        statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message || 'Biometric authentication failed. Please try password login.'}</div>`;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-fingerprint me-2"></i>Login with Fingerprint';
+    }
+});
+</script>
+{% endblock %}

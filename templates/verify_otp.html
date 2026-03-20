@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Verify OTP - Two-Factor Authentication System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center">
+                <h3><i class="fas fa-key me-2"></i>Two-Factor Authentication</h3>
+                <p class="mb-0">Enter the OTP code sent to your email</p>
+            </div>
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="fas fa-envelope fa-3x text-primary mb-3"></i>
+                    <h5>Check Your Email</h5>
+                    <p class="text-muted">We've sent a 6-digit code to your registered email address.</p>
+                    
+                    <!-- Show OTP if email not configured -->
+                    <div class="alert alert-warning mt-3" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Email Not Configured:</strong> Check the terminal/console where you ran the app for the OTP code.
+                        <br><small>To enable email sending, run: <code>python setup_email.py</code></small>
+                    </div>
+                </div>
+                
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-4">
+                        <label for="otp" class="form-label text-center d-block">
+                            <i class="fas fa-key me-1"></i>Enter OTP Code
+                        </label>
+                        <input type="text" class="form-control text-center" id="otp" name="otp" 
+                               maxlength="6" pattern="[0-9]{6}" required autofocus
+                               style="font-size: 1.5rem; letter-spacing: 0.5rem;">
+                        <div class="form-text text-center">Enter the 6-digit code from your email</div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-check me-2"></i>Verify OTP
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="text-center mt-4">
+                    <p class="text-muted">
+                        <i class="fas fa-clock me-1"></i>
+                        This code will expire in 5 minutes
+                    </p>
+                    <p class="text-muted">
+                        Didn't receive the code? 
+                        <a href="{{ url_for('login') }}" class="text-decoration-none">Try logging in again</a>
+                    </p>
+                </div>
+                
+                <div class="alert alert-warning mt-3" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Security:</strong> Never share your OTP code with anyone. Our system will never ask for it via phone or other means.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-format OTP input
+    document.getElementById('otp').addEventListener('input', function(e) {
+        // Remove any non-numeric characters
+        this.value = this.value.replace(/[^0-9]/g, '');
+        
+        // Auto-submit when 6 digits are entered
+        if (this.value.length === 6) {
+            // Small delay to show the complete code
+            setTimeout(() => {
+                this.form.submit();
+            }, 500);
+        }
+    });
+    
+    // Focus on input when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('otp').focus();
+    });
+</script>
+{% endblock %}

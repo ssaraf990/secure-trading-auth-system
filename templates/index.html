@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Two-Factor Authentication System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header text-center">
+                <h2><i class="fas fa-shield-alt me-2"></i>Welcome to TradeSecure</h2>
+                <p class="mb-0">Advanced Two-Factor Authentication System</p>
+            </div>
+            <div class="card-body text-center p-5">
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="feature-box p-4">
+                            <i class="fas fa-lock fa-3x text-primary mb-3"></i>
+                            <h4>Secure Login</h4>
+                            <p class="text-muted">Two-factor authentication with OTP verification via email</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="feature-box p-4">
+                            <i class="fas fa-shield-virus fa-3x text-success mb-3"></i>
+                            <h4>Brute Force Protection</h4>
+                            <p class="text-muted">Account locking after multiple failed attempts</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="feature-box p-4">
+                            <i class="fas fa-envelope fa-3x text-info mb-3"></i>
+                            <h4>Email OTP</h4>
+                            <p class="text-muted">One-time passwords sent securely to your email</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="feature-box p-4">
+                            <i class="fas fa-user-shield fa-3x text-warning mb-3"></i>
+                            <h4>Account Security</h4>
+                            <p class="text-muted">Password hashing and session management</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h5>Get Started</h5>
+                    <p class="text-muted">Register for a new account or login to access your dashboard</p>
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                        <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-md-2">
+                            <i class="fas fa-user-plus me-2"></i>Register Now
+                        </a>
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-sign-in-alt me-2"></i>Login
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

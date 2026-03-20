@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Account Locked - Two-Factor Authentication System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center bg-danger">
+                <h3><i class="fas fa-lock me-2"></i>Account Temporarily Locked</h3>
+                <p class="mb-0">Security protection activated</p>
+            </div>
+            <div class="card-body p-4 text-center">
+                <div class="mb-4">
+                    <i class="fas fa-exclamation-triangle fa-4x text-danger mb-3"></i>
+                    <h4>Account Security Lock</h4>
+                    <p class="text-muted">Your account has been temporarily locked due to multiple failed login attempts.</p>
+                </div>
+                
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    <strong>Security Notice:</strong> This is an automated security measure to protect your account from brute force attacks.
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-warning">
+                            <div class="card-body text-center">
+                                <i class="fas fa-clock fa-2x text-warning mb-2"></i>
+                                <h6>Lock Duration</h6>
+                                <p class="text-muted mb-0">1 hour (60 minutes)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-danger">
+                            <div class="card-body text-center">
+                                <i class="fas fa-ban fa-2x text-danger mb-2"></i>
+                                <h6>Failed Attempts</h6>
+                                <p class="text-muted mb-0">5 or more</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if remaining_time > 0 %}
+                <div class="alert alert-info mt-3" role="alert">
+                    <i class="fas fa-hourglass-half me-2"></i>
+                    <strong>Time Remaining:</strong> {{ remaining_time }} minutes until your account is unlocked.
+                </div>
+                {% endif %}
+                
+                <div class="mt-4">
+                    <h5>What to do next:</h5>
+                    <ul class="list-unstyled text-start">
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Wait for the lock period to expire (1 hour)
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Ensure you're using the correct username and password
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Check your email for any security notifications
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Contact support if you believe this is an error
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="mt-4">
+                    <a href="{{ url_for('login') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-sign-in-alt me-2"></i>Try Login Again
+                    </a>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-home me-2"></i>Return Home
+                    </a>
+                </div>
+                
+                <div class="alert alert-info mt-4" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Tip:</strong> If you continue to have trouble accessing your account, consider resetting your password or contacting our support team.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

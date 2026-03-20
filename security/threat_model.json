@@ -1,0 +1,116 @@
+{
+  "components": {
+    "biometricVerification": {
+      "Spoofing": "Fake WebAuthn credentials or cloned keys",
+      "Mitigation": "Server-side signature validation via @simplewebauthn/server and challenge-response verification"
+    },
+    "stockAPI": {
+      "InformationDisclosure": "API key exposure in frontend",
+      "Mitigation": "Proxy all API calls through backend and hide keys in environment variables"
+    },
+    "dummyTrading": {
+      "Tampering": "Manipulated trade requests without verification",
+      "Mitigation": "Require verified biometric token before confirming trades, validate on server-side"
+    },
+    "userAuthentication": {
+      "Spoofing": "Brute force password attacks",
+      "Mitigation": "Account locking after failed attempts, OTP-based 2FA, password hashing"
+    },
+    "sessionManagement": {
+      "Repudiation": "Unauthorized actions cannot be traced",
+      "Mitigation": "Session tracking, transaction logging with user_id and timestamps"
+    },
+    "database": {
+      "Tampering": "SQL injection attacks",
+      "Mitigation": "Parameterized queries, input validation, prepared statements"
+    },
+    "emailOTP": {
+      "InformationDisclosure": "OTP interception via email",
+      "Mitigation": "Time-limited OTPs (5 minutes), one-time use, secure email delivery"
+    },
+    "walletBalance": {
+      "Tampering": "Client-side balance manipulation",
+      "Mitigation": "Server-side balance validation, database transactions, atomic operations"
+    }
+  },
+  "stride_categories": {
+    "Spoofing": [
+      {
+        "component": "biometricVerification",
+        "threat": "Fake WebAuthn credentials",
+        "severity": "High",
+        "mitigation": "Server-side signature validation"
+      },
+      {
+        "component": "userAuthentication",
+        "threat": "Brute force password attacks",
+        "severity": "Medium",
+        "mitigation": "Account locking, 2FA"
+      }
+    ],
+    "Tampering": [
+      {
+        "component": "dummyTrading",
+        "threat": "Manipulated trade requests",
+        "severity": "High",
+        "mitigation": "Biometric verification required"
+      },
+      {
+        "component": "database",
+        "threat": "SQL injection",
+        "severity": "High",
+        "mitigation": "Parameterized queries"
+      },
+      {
+        "component": "walletBalance",
+        "threat": "Balance manipulation",
+        "severity": "High",
+        "mitigation": "Server-side validation"
+      }
+    ],
+    "Repudiation": [
+      {
+        "component": "sessionManagement",
+        "threat": "Unauthorized actions not traceable",
+        "severity": "Medium",
+        "mitigation": "Transaction logging with user_id and timestamps"
+      }
+    ],
+    "InformationDisclosure": [
+      {
+        "component": "stockAPI",
+        "threat": "API key exposure",
+        "severity": "High",
+        "mitigation": "Backend proxy, environment variables"
+      },
+      {
+        "component": "emailOTP",
+        "threat": "OTP interception",
+        "severity": "Medium",
+        "mitigation": "Time-limited, one-time use OTPs"
+      }
+    ],
+    "DenialOfService": [
+      {
+        "component": "stockAPI",
+        "threat": "API rate limiting exhaustion",
+        "severity": "Medium",
+        "mitigation": "Request throttling, caching"
+      },
+      {
+        "component": "userAuthentication",
+        "threat": "Account lockout attacks",
+        "severity": "Low",
+        "mitigation": "IP-based rate limiting"
+      }
+    ],
+    "ElevationOfPrivilege": [
+      {
+        "component": "sessionManagement",
+        "threat": "Session hijacking",
+        "severity": "High",
+        "mitigation": "Secure session tokens, HTTPS, session timeout"
+      }
+    ]
+  }
+}

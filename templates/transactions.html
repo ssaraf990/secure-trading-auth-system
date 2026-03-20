@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block title %}Trade - TradeSecure{% endblock %}
+
+{% block content %}
+
+{% if not has_tpin %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>TPIN not set!</strong> You need to set a Transaction PIN before you can trade.
+    <a href="{{ url_for('set_tpin') }}" class="btn btn-sm btn-warning ms-3">Set TPIN Now</a>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Trade Form -->
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="fas fa-exchange-alt me-2"></i>Place Order
+            </div>
+            <div class="card-body">
+
+                {% if message %}
+                <div class="alert alert-{{ message_type or 'info' }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                <div class="mb-3 d-flex align-items-center justify-content-between">
+                    <span class="badge" style="background:#30363d; color:#f59e0b; font-size:0.95em;">
+                        <i class="fas fa-wallet me-1"></i>₹{{ '%.2f'|format(wallet_inr) }}
+                    </span>
+                    {% if has_tpin %}
+                    <span class="badge" style="background:#166534; color:#fff; font-size:0.8em;">
+                        <i class="fas fa-lock me-1"></i>TPIN Active
+                    </span>
+                    {% else %}
+                    <a href="{{ url_for('set_tpin') }}" class="badge text-decoration-none" style="background:#7f1d1d; color:#fff; font-size:0.8em;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Set TPIN
+                    </a>
+                    {% endif %}
+                </div>
+
+                <form method="POST" id="tradeForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="tpin_verified" id="hiddenTPIN" value="false">
+
+                    <!-- Symbol Search -->
+                    <div class="mb-3">
+                        <label class="form-label">Symbol</label>
+                        <div class="d-flex gap-2">
+                            <input class="form-control" id="symbolInput" name="symbol"
+                                   placeholder="e.g. AAPL, RELIANCE, HDFCBANK"
+                                   style="text-transform:uppercase;" maxlength="15" required>
+                            <button type="button" class="btn btn-outline-secondary" id="searchBtn" style="white-space:nowrap;">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div id="symbolSuggestions" class="mt-1 d-flex flex-wrap gap-1">
+                            {% for s in watchlist %}
+                            <span class="badge symbol-chip" style="background:#1c2128; color:#8b949e; cursor:pointer; font-size:0.8em; padding:4px 8px;"
+                                  onclick="setSymbol('{{ s }}')">{{ s }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Live Price -->
+                    <div class="mb-3">
+                        <label class="form-label">Live Price</label>
+                        <div style="background:#0d1117; border:1px solid #30363d; border-radius:8px; padding:10px;">
+                            <span id="livePrice" style="color:#f59e0b; font-size:1.1em; font-weight:600;">Loading...</span>
+                            <span id="liveChange" class="ms-2" style="font-size:0.85em;"></span>
+                            <span id="sourceTag" class="ms-2 badge" style="font-size:0.7em;"></span>
+                        </div>
+                    </div>
+
+                    <!-- Order Type -->
+                    <div class="mb-3">
+                        <label class="form-label">Order Type</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-primary w-50" id="marketBtn" onclick="setOrderType('MARKET')">
+                                Market
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary w-50" id="limitBtn" onclick="setOrderType('LIMIT')">
+                                Limit
+                            </button>
+                        </div>
+                        <input type="hidden" name="order_type" id="orderTypeInput" value="MARKET">
+                    </div>
+
+                    <!-- Limit Price (hidden by default) -->
+                    <div class="mb-3" id="limitPriceRow" style="display:none;">
+                        <label class="form-label">Limit Price (₹)</label>
+                        <input class="form-control" name="limit_price" id="limitPriceInput" type="number" min="0.01" step="0.01" placeholder="Enter target price">
+                        <div class="form-text">Order executes at this price (simulated).</div>
+                    </div>
+
+                    <!-- Side -->
+                    <div class="mb-3">
+                        <label class="form-label">Side</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-success w-50" id="buyBtn" onclick="setSide('BUY')">
+                                <i class="fas fa-arrow-up me-1"></i>BUY
+                            </button>
+                            <button type="button" class="btn btn-outline-danger w-50" id="sellBtn" onclick="setSide('SELL')">
+                                <i class="fas fa-arrow-down me-1"></i>SELL
+                            </button>
+                        </div>
+                        <input type="hidden" name="side" id="sideInput" value="BUY">
+                    </div>
+
+                    <!-- Shares -->
+                    <div class="mb-3">
+                        <label class="form-label">Quantity</label>
+                        <input class="form-control" name="shares" id="sharesInput" type="number" min="1" step="1" value="1" required>
+                    </div>
+
+                    <!-- Estimate -->
+                    <div class="mb-4 p-3" style="background:#0d1117; border:1px solid #30363d; border-radius:8px;">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span style="color:#8b949e;">Estimated Total</span>
+                            <span id="estimatedTotal" style="color:#f59e0b; font-weight:600;">₹0.00</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span style="color:#8b949e;">Order Type</span>
+                            <span id="orderTypeLabel" style="color:#e6edf3; font-size:0.9em;">Market Order</span>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-primary btn-lg" id="verifyBtn" {% if not has_tpin %}disabled{% endif %}>
+                            <i class="fas fa-lock me-2"></i>Enter TPIN & Trade
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction History -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div><i class="fas fa-list me-2"></i>Order History</div>
+                <small class="text-muted">{{ username }}</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr style="background:#0d1117;">
+                                <th>Time</th>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Price (₹)</th>
+                                <th class="text-end">Amount (₹)</th>
+                                <th>Auth</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if transactions %}
+                                {% for t in transactions %}
+                                <tr>
+                                    <td style="color:#8b949e;"><small>{{ t.tx_time[:16] if t.tx_time else '-' }}</small></td>
+                                    <td><strong style="color:#f59e0b;">{{ t.symbol }}</strong></td>
+                                    <td>
+                                        <span class="badge" style="background:{% if t.side == 'BUY' %}#166534{% else %}#7f1d1d{% endif %}; color:#fff;">
+                                            {{ t.side }}
+                                        </span>
+                                        {% if t.verified_by and 'limit' in t.verified_by %}
+                                        <span class="badge ms-1" style="background:#1c2128; color:#8b949e; font-size:0.7em;">LIMIT</span>
+                                        {% else %}
+                                        <span class="badge ms-1" style="background:#1c2128; color:#8b949e; font-size:0.7em;">MARKET</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ t.qty }}</td>
+                                    <td class="text-end">₹{{ '%.2f'|format(t.price) }}</td>
+                                    <td class="text-end {% if t.side == 'BUY' %}text-loss{% else %}text-gain{% endif %}" style="font-weight:600;">
+                                        {% if t.side == 'BUY' %}−{% else %}+{% endif %}₹{{ '%.2f'|format(t.price * t.qty) }}
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="background:#1c2128; color:#8b949e; font-size:0.7em;">
+                                            <i class="fas fa-lock me-1" style="color:#f59e0b;"></i>tpin
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4" style="color:#8b949e;">
+                                        <i class="fas fa-inbox fa-2x mb-2 d-block" style="opacity:0.3;"></i>No orders yet
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TPIN Modal -->
+<div class="modal fade" id="tpinModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content" style="background:#161b22; border:1px solid #30363d;">
+            <div class="modal-header" style="border-bottom:1px solid #30363d;">
+                <h5 class="modal-title">
+                    <i class="fas fa-lock me-2" style="color:#f59e0b;"></i>Authorise Trade
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="tpinOrderSummary" class="p-2 mb-3 rounded" style="background:#0d1117; border:1px solid #30363d; font-size:0.88em; color:#8b949e;"></div>
+                <p style="color:#8b949e; font-size:0.88em;">Enter your 6-digit Transaction PIN to authorise.</p>
+                <div class="mb-3">
+                    <input type="password" id="tpinInput" class="form-control text-center"
+                           maxlength="6" inputmode="numeric" placeholder="● ● ● ● ● ●"
+                           style="font-size:1.4em; letter-spacing:0.4em; background:#0d1117; color:#e6edf3;">
+                </div>
+                <div id="tpinError" class="text-danger small mb-2" style="display:none;"></div>
+                <div class="d-grid">
+                    <button class="btn btn-primary" id="confirmTPINBtn">
+                        <i class="fas fa-check me-2"></i>Confirm Order
+                    </button>
+                </div>
+                <div class="mt-3 text-center">
+                    <small style="color:#8b949e;">Forgot TPIN? <a href="{{ url_for('set_tpin') }}" style="color:#f59e0b;">Reset it here</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPrice = 0;
+let selectedSide = 'BUY';
+let selectedOrderType = 'MARKET';
+let tpinModal;
+
+document.addEventListener('DOMContentLoaded', () => {
+    tpinModal = new bootstrap.Modal(document.getElementById('tpinModal'));
+    setSide('BUY');
+    setOrderType('MARKET');
+
+    const symbolInput = document.getElementById('symbolInput');
+    document.getElementById('searchBtn').addEventListener('click', () => {
+        const sym = symbolInput.value.toUpperCase().trim();
+        if (sym) fetchPrice(sym);
+    });
+    symbolInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); fetchPrice(symbolInput.value.toUpperCase().trim()); }
+    });
+    symbolInput.addEventListener('input', () => {
+        symbolInput.value = symbolInput.value.toUpperCase();
+    });
+    // Load price for first watchlist symbol on page load
+    if (symbolInput.value) fetchPrice(symbolInput.value);
+
+    document.getElementById('sharesInput').addEventListener('input', updateEstimate);
+    document.getElementById('limitPriceInput') && document.getElementById('limitPriceInput').addEventListener('input', updateEstimate);
+
+    document.getElementById('verifyBtn').addEventListener('click', () => {
+        const sym = symbolInput.value.toUpperCase().trim();
+        if (!sym) { alert('Enter a stock symbol first.'); return; }
+        const shares = parseInt(document.getElementById('sharesInput').value);
+        if (!shares || shares < 1) { alert('Enter a valid quantity.'); return; }
+        if (selectedOrderType === 'LIMIT') {
+            const lp = parseFloat(document.getElementById('limitPriceInput').value);
+            if (!lp || lp <= 0) { alert('Enter a valid limit price.'); return; }
+        }
+        const qty = shares;
+        const price = selectedOrderType === 'LIMIT'
+            ? parseFloat(document.getElementById('limitPriceInput').value)
+            : currentPrice;
+        const total = (price * qty).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+        document.getElementById('tpinOrderSummary').innerHTML =
+            `<strong style="color:#e6edf3;">${selectedSide}</strong> ${qty} × <strong style="color:#f59e0b;">${sym}</strong> @ ₹${price.toFixed(2)} &nbsp;|&nbsp; Total: <strong style="color:#f59e0b;">₹${total}</strong> &nbsp;|&nbsp; ${selectedOrderType}`;
+        document.getElementById('tpinInput').value = '';
+        document.getElementById('tpinError').style.display = 'none';
+        tpinModal.show();
+        setTimeout(() => document.getElementById('tpinInput').focus(), 400);
+    });
+
+    document.getElementById('confirmTPINBtn').addEventListener('click', verifyTPIN);
+    document.getElementById('tpinInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') verifyTPIN();
+    });
+});
+
+function setSymbol(sym) {
+    document.getElementById('symbolInput').value = sym;
+    fetchPrice(sym);
+    document.querySelectorAll('.symbol-chip').forEach(el => {
+        el.style.background = el.textContent.trim() === sym ? '#f59e0b22' : '#1c2128';
+        el.style.color = el.textContent.trim() === sym ? '#f59e0b' : '#8b949e';
+    });
+}
+
+function setSide(side) {
+    selectedSide = side;
+    document.getElementById('sideInput').value = side;
+    document.getElementById('buyBtn').className  = side === 'BUY' ? 'btn btn-success w-50' : 'btn btn-outline-success w-50';
+    document.getElementById('sellBtn').className = side === 'SELL' ? 'btn btn-danger w-50' : 'btn btn-outline-danger w-50';
+    updateEstimate();
+}
+
+function setOrderType(type) {
+    selectedOrderType = type;
+    document.getElementById('orderTypeInput').value = type;
+    document.getElementById('marketBtn').className = type === 'MARKET' ? 'btn btn-primary w-50' : 'btn btn-outline-secondary w-50';
+    document.getElementById('limitBtn').className  = type === 'LIMIT'  ? 'btn btn-warning w-50'  : 'btn btn-outline-secondary w-50';
+    document.getElementById('limitPriceRow').style.display = type === 'LIMIT' ? '' : 'none';
+    document.getElementById('orderTypeLabel').textContent = type === 'LIMIT' ? 'Limit Order' : 'Market Order';
+    updateEstimate();
+}
+
+async function fetchPrice(symbol) {
+    if (!symbol) return;
+    const priceEl = document.getElementById('livePrice');
+    const changeEl = document.getElementById('liveChange');
+    const srcEl = document.getElementById('sourceTag');
+    priceEl.textContent = 'Fetching...';
+    priceEl.style.color = '#8b949e';
+    try {
+        const res = await fetch('/api/stock/price/' + symbol, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data.success) {
+            currentPrice = data.price;
+            priceEl.textContent = '₹' + data.price.toFixed(2);
+            priceEl.style.color = '#f59e0b';
+            const chg = data.change_percent || 0;
+            changeEl.textContent = (chg >= 0 ? '▲ ' : '▼ ') + Math.abs(chg).toFixed(2) + '%';
+            changeEl.style.color = chg >= 0 ? '#16a34a' : '#dc2626';
+            srcEl.textContent = data.source === 'yfinance' ? '🟢 Live' : '🟡 Mock';
+            srcEl.style.background = data.source === 'yfinance' ? '#166534' : '#78350f';
+            srcEl.style.color = '#fff';
+            updateEstimate();
+        } else {
+            priceEl.textContent = data.error || 'Symbol not found';
+            priceEl.style.color = '#dc2626';
+            currentPrice = 0;
+        }
+    } catch(e) { priceEl.textContent = 'Error fetching price'; currentPrice = 0; }
+}
+
+function updateEstimate() {
+    const shares = parseInt(document.getElementById('sharesInput').value) || 0;
+    let price = currentPrice;
+    if (selectedOrderType === 'LIMIT') {
+        const lp = parseFloat(document.getElementById('limitPriceInput') && document.getElementById('limitPriceInput').value);
+        if (lp > 0) price = lp;
+    }
+    const total = price * shares;
+    document.getElementById('estimatedTotal').textContent = '₹' + total.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+async function verifyTPIN() {
+    const tpin = document.getElementById('tpinInput').value.trim();
+    const errorEl = document.getElementById('tpinError');
+    const btn = document.getElementById('confirmTPINBtn');
+
+    if (!/^\d{6}$/.test(tpin)) {
+        errorEl.textContent = 'TPIN must be exactly 6 digits.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
+    errorEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/verify-tpin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ tpin })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById('hiddenTPIN').value = 'true';
+            tpinModal.hide();
+            document.getElementById('tradeForm').submit();
+        } else {
+            if (data.needs_setup) {
+                window.location.href = '/set-tpin';
+            }
+            errorEl.textContent = data.error || 'Incorrect TPIN.';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-2"></i>Confirm Order';
+        }
+    } catch(e) {
+        errorEl.textContent = 'Error: ' + e.message;
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-2"></i>Confirm Order';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Security Audit Log - TradeSecure{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex align-items-center justify-content-between">
+            <h3 class="mb-0">
+                <i class="fas fa-shield-alt me-2" style="color:#f59e0b;"></i>Security Audit Log
+            </h3>
+            <small style="color:#8b949e;">Live view — last 100 events</small>
+        </div>
+    </div>
+</div>
+
+<!-- Stats row -->
+<div class="row mb-4 g-3">
+    <div class="col-6 col-md-3">
+        <div class="card text-center py-3">
+            <div style="font-size:1.8em; font-weight:700; color:#e6edf3;">{{ total }}</div>
+            <div style="color:#8b949e; font-size:0.85em;">Total Events</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center py-3">
+            <div style="font-size:1.8em; font-weight:700; color:#dc2626;">{{ critical }}</div>
+            <div style="color:#8b949e; font-size:0.85em;">Critical</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center py-3">
+            <div style="font-size:1.8em; font-weight:700; color:#f59e0b;">{{ warnings }}</div>
+            <div style="color:#8b949e; font-size:0.85em;">Warnings</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center py-3">
+            <div style="font-size:1.8em; font-weight:700; color:#16a34a;">{{ trades }}</div>
+            <div style="color:#8b949e; font-size:0.85em;">Trades Executed</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter bar -->
+<div class="card mb-3">
+    <div class="card-body py-2 d-flex gap-2 flex-wrap align-items-center">
+        <span style="color:#8b949e; font-size:0.85em;">Filter:</span>
+        <button class="btn btn-sm filter-btn active" data-filter="ALL" onclick="filterEvents('ALL')">All</button>
+        <button class="btn btn-sm filter-btn" data-filter="CRITICAL" onclick="filterEvents('CRITICAL')" style="background:#7f1d1d; color:#fff; border:none;">Critical</button>
+        <button class="btn btn-sm filter-btn" data-filter="WARNING" onclick="filterEvents('WARNING')" style="background:#78350f; color:#fff; border:none;">Warning</button>
+        <button class="btn btn-sm filter-btn" data-filter="TRADE_EXECUTED" onclick="filterEvents('TRADE_EXECUTED')" style="background:#166534; color:#fff; border:none;">Trades</button>
+        <button class="btn btn-sm filter-btn" data-filter="LOGIN_ATTEMPT" onclick="filterEvents('LOGIN_ATTEMPT')" style="background:#1e3a5f; color:#fff; border:none;">Logins</button>
+        <button class="btn btn-sm filter-btn" data-filter="BRUTE_FORCE" onclick="filterEvents('BRUTE_FORCE')" style="background:#4c1d95; color:#fff; border:none;">Brute Force</button>
+    </div>
+</div>
+
+<!-- Events table -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if events %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size:0.85em;">
+                <thead>
+                    <tr style="background:#0d1117;">
+                        <th class="ps-3">Time</th>
+                        <th>Event</th>
+                        <th>User</th>
+                        <th>IP</th>
+                        <th>Details</th>
+                        <th>Severity</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsTable">
+                    {% for e in events %}
+                    <tr class="event-row"
+                        data-severity="{{ e.get('severity', 'INFO') }}"
+                        data-type="{{ e.get('event_type', '') }}">
+                        <td class="ps-3" style="color:#8b949e; white-space:nowrap;">
+                            {{ e.get('_display_time', e.get('timestamp', ''))[:19] }}
+                        </td>
+                        <td>
+                            <span class="badge" style="
+                                background:{% if e.get('event_type') == 'TRADE_EXECUTED' %}#166534
+                                {% elif e.get('event_type') == 'BRUTE_FORCE_DETECTED' %}#4c1d95
+                                {% elif e.get('event_type') == 'ACCOUNT_LOCKED' %}#7f1d1d
+                                {% elif e.get('event_type') == 'LOGIN_ATTEMPT' %}#1e3a5f
+                                {% elif e.get('event_type') == 'OTP_VERIFICATION' %}#1c3a2e
+                                {% else %}#30363d{% endif %};
+                                color:#fff; font-size:0.75em;">
+                                {{ e.get('event_type', 'UNKNOWN') | replace('_', ' ') }}
+                            </span>
+                        </td>
+                        <td style="color:#f59e0b;">{{ e.get('username', '—') }}</td>
+                        <td style="color:#8b949e;">{{ e.get('ip_address', '—') }}</td>
+                        <td style="color:#e6edf3;">
+                            {% if e.get('event_type') == 'TRADE_EXECUTED' %}
+                                {{ e.get('side', '') }} {{ e.get('quantity', '') }} × {{ e.get('symbol', '') }} @ ₹{{ e.get('amount', '') }}
+                                <span class="badge ms-1" style="background:#1c2128; color:#8b949e; font-size:0.7em;">
+                                    <i class="fas fa-lock me-1"></i>{{ e.get('verified_by', '') }}
+                                </span>
+                            {% elif e.get('event_type') == 'LOGIN_ATTEMPT' %}
+                                {% if e.get('success') %}<span style="color:#16a34a;">✓ Success</span>
+                                {% else %}<span style="color:#dc2626;">✗ Failed</span>
+                                {% if e.get('remaining_attempts') is not none %}
+                                — {{ e.get('remaining_attempts') }} attempts left
+                                {% endif %}{% endif %}
+                            {% elif e.get('event_type') == 'BRUTE_FORCE_DETECTED' %}
+                                {{ e.get('failed_attempts', '') }} failed attempts — account locked
+                            {% elif e.get('event_type') == 'ACCOUNT_LOCKED' %}
+                                Locked for {{ e.get('lock_duration_minutes', '') }} min
+                            {% elif e.get('event_type') == 'PASSWORD_VERIFICATION' %}
+                                Purpose: {{ e.get('purpose', '') }}
+                                {% if e.get('success') %}<span style="color:#16a34a;"> ✓</span>
+                                {% else %}<span style="color:#dc2626;"> ✗</span>{% endif %}
+                            {% else %}
+                                {{ e.get('reason', e.get('method', '')) }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set sev = e.get('severity', 'INFO') %}
+                            <span class="badge" style="
+                                background:{% if sev == 'CRITICAL' %}#7f1d1d{% elif sev == 'WARNING' %}#78350f{% else %}#1c2128{% endif %};
+                                color:{% if sev == 'CRITICAL' %}#fca5a5{% elif sev == 'WARNING' %}#fcd34d{% else %}#8b949e{% endif %};">
+                                {{ sev }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5" style="color:#8b949e;">
+            <i class="fas fa-shield-alt fa-3x mb-3 d-block" style="opacity:0.2;"></i>
+            No security events recorded yet. Events appear here after login attempts, trades, and security incidents.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterEvents(filter) {
+    // Update active button
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.remove('active');
+        if (!b.style.background) b.style.background = '';
+    });
+    event.target.classList.add('active');
+
+    const rows = document.querySelectorAll('.event-row');
+    rows.forEach(row => {
+        const sev  = row.dataset.severity || '';
+        const type = row.dataset.type || '';
+        if (filter === 'ALL') {
+            row.style.display = '';
+        } else if (filter === 'CRITICAL' || filter === 'WARNING') {
+            row.style.display = sev === filter ? '' : 'none';
+        } else {
+            row.style.display = type.includes(filter) ? '' : 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - TradeSecure{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <!-- Wallet + Session timeout bar -->
+    <div class="col-12">
+        <div class="d-flex align-items-center justify-content-between p-3 rounded" style="background:#161b22; border:1px solid #30363d;">
+            <div class="d-flex gap-3 align-items-center">
+                <span style="color:#8b949e;">Welcome,</span>
+                <strong style="color:#f59e0b;">{{ username }}</strong>
+                <span class="badge" style="background:#166534; color:#fff;"><i class="fas fa-check-circle me-1"></i>Authenticated</span>
+            </div>
+            <div class="d-flex gap-3 align-items-center">
+                <span class="badge" style="background:#30363d; color:#f59e0b; font-size:0.9em;">
+                    <i class="fas fa-wallet me-1"></i>₹{{ '%.2f'|format(wallet_inr) }}
+                </span>
+                <span id="sessionTimer" style="color:#8b949e; font-size:0.85em;">
+                    <i class="fas fa-clock me-1"></i>Session: <span id="timerVal">15:00</span>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Candlestick Chart -->
+    <div class="col-lg-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-chart-candlestick me-2" style="color:#f59e0b;"></i>
+                    <span id="chartTitle">Price Chart</span>
+                    <span id="chartSource" class="badge ms-2" style="font-size:0.7em;"></span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <select id="chartSymbol" class="form-select form-select-sm" style="background:#0d1117; color:#e6edf3; border-color:#30363d; width:auto;">
+                        <option value="AAPL">AAPL</option>
+                        <option value="TSLA">TSLA</option>
+                        <option value="GOOGL">GOOGL</option>
+                        <option value="MSFT">MSFT</option>
+                        <option value="NVDA">NVDA</option>
+                        <option value="AMZN">AMZN</option>
+                        <option value="META">META</option>
+                        <option value="NFLX">NFLX</option>
+                        <option value="INFY">INFY</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-secondary" id="refreshChartBtn">
+                        <i class="fas fa-rotate"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="chartLoading" class="text-center py-5" style="color:#8b949e;">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3 d-block" style="color:#f59e0b;"></i>Loading chart...
+                </div>
+                <canvas id="candleChart" style="display:none;"></canvas>
+                <div id="chartError" class="text-center py-4" style="color:#8b949e; display:none;">
+                    <i class="fas fa-exclamation-circle me-2"></i>Could not load chart data
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Overview -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div><i class="fas fa-chart-line me-2" style="color:#f59e0b;"></i>Market</div>
+                <button id="refreshBtn" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-rotate me-1"></i>Refresh
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size:0.88em;">
+                        <thead>
+                            <tr style="background:#0d1117;">
+                                <th class="ps-3">Symbol</th>
+                                <th class="text-end">Price</th>
+                                <th class="text-end pe-3">Change</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stocksBody">
+                            <tr><td colspan="3" class="text-center py-3" style="color:#8b949e;">
+                                <i class="fas fa-spinner fa-spin me-2"></i>Loading...
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="px-3 pb-2 pt-1" id="refreshedAt" style="color:#8b949e; font-size:0.75em;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick actions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body py-3">
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="{{ url_for('transactions') }}" class="btn btn-primary">
+                        <i class="fas fa-exchange-alt me-2"></i>Trade
+                    </a>
+                    <a href="{{ url_for('portfolio') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-briefcase me-2"></i>Portfolio
+                    </a>
+                    <a href="{{ url_for('set_tpin') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-lock me-2"></i>Manage TPIN
+                    </a>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger ms-auto">
+                        <i class="fas fa-sign-out-alt me-2"></i>Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+<script>
+// ---- Session countdown timer ----
+let secondsLeft = {{ session_timeout_seconds|default(900) }};
+const timerEl = document.getElementById('timerVal');
+function updateTimer() {
+    if (secondsLeft <= 0) { window.location.href = '/logout'; return; }
+    const m = Math.floor(secondsLeft / 60).toString().padStart(2,'0');
+    const s = (secondsLeft % 60).toString().padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+    if (secondsLeft <= 120) timerEl.style.color = '#dc2626';
+    secondsLeft--;
+}
+setInterval(updateTimer, 1000);
+updateTimer();
+
+// Reset timer on any user activity
+['click','keydown','mousemove'].forEach(ev =>
+    document.addEventListener(ev, () => { secondsLeft = {{ session_timeout_seconds|default(900) }}; timerEl.style.color = ''; }, { passive: true })
+);
+
+// ---- Market overview ----
+async function fetchStocks() {
+    const body = document.getElementById('stocksBody');
+    const ts = document.getElementById('refreshedAt');
+    try {
+        const res = await fetch("{{ url_for('api_stocks') }}", { credentials: 'same-origin' });
+        const json = await res.json();
+        const srcBadge = json.source === 'live'
+            ? '<span style="background:#166534;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.7em;">🟢 Live</span>'
+            : '<span style="background:#78350f;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.7em;">🟡 Mock</span>';
+        body.innerHTML = json.data.map(s => {
+            const up = s.change_pct >= 0;
+            return `<tr>
+                <td class="ps-3"><strong style="color:#f59e0b;">${s.symbol}</strong></td>
+                <td class="text-end">₹${s.price.toFixed(2)}</td>
+                <td class="text-end pe-3" style="color:${up?'#16a34a':'#dc2626'};font-weight:600;">
+                    ${up?'▲':'▼'} ${Math.abs(s.change_pct).toFixed(2)}%
+                </td>
+            </tr>`;
+        }).join('');
+        ts.innerHTML = `Updated ${new Date(json.refreshed_at).toLocaleTimeString()} ${srcBadge}`;
+    } catch(e) {
+        body.innerHTML = '<tr><td colspan="3" class="text-center" style="color:#dc2626;">Failed to load</td></tr>';
+    }
+}
+
+// ---- Candlestick chart ----
+let candleChart = null;
+
+async function loadChart(symbol) {
+    const loading = document.getElementById('chartLoading');
+    const canvas  = document.getElementById('candleChart');
+    const errDiv  = document.getElementById('chartError');
+    const titleEl = document.getElementById('chartTitle');
+    const srcEl   = document.getElementById('chartSource');
+
+    loading.style.display = 'block';
+    canvas.style.display  = 'none';
+    errDiv.style.display  = 'none';
+
+    try {
+        const res  = await fetch(`/api/stock/history/${symbol}`, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!data.success || !data.candles || data.candles.length === 0) throw new Error('No data');
+
+        titleEl.textContent = `${symbol} — 30D OHLC`;
+        srcEl.textContent   = '🟢 yfinance';
+        srcEl.style.background = '#166534';
+        srcEl.style.color = '#fff';
+
+        const ohlc = data.candles.map(c => ({
+            x: new Date(c.x).getTime(),
+            o: c.o, h: c.h, l: c.l, c: c.c
+        }));
+
+        if (candleChart) candleChart.destroy();
+        loading.style.display = 'none';
+        canvas.style.display  = 'block';
+
+        candleChart = new Chart(canvas.getContext('2d'), {
+            type: 'candlestick',
+            data: {
+                datasets: [{
+                    label: symbol,
+                    data: ohlc,
+                    color: {
+                        up:   '#16a34a',
+                        down: '#dc2626',
+                        unchanged: '#8b949e'
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#161b22',
+                        titleColor: '#e6edf3',
+                        bodyColor: '#e6edf3',
+                        borderColor: '#30363d',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'timeseries',
+                        time: { unit: 'day' },
+                        grid: { color: '#21262d' },
+                        ticks: { color: '#8b949e' }
+                    },
+                    y: {
+                        grid: { color: '#21262d' },
+                        ticks: { color: '#8b949e', callback: v => '₹' + v.toFixed(0) }
+                    }
+                }
+            }
+        });
+    } catch(e) {
+        loading.style.display = 'none';
+        errDiv.style.display  = 'block';
+        // Fallback: try mock line chart
+        titleEl.textContent = `${symbol} — Mock trend`;
+        srcEl.textContent   = '🟡 Mock';
+        srcEl.style.background = '#78350f';
+        srcEl.style.color = '#fff';
+    }
+}
+
+document.getElementById('chartSymbol').addEventListener('change', e => loadChart(e.target.value));
+document.getElementById('refreshChartBtn').addEventListener('click', () => loadChart(document.getElementById('chartSymbol').value));
+document.getElementById('refreshBtn').addEventListener('click', fetchStocks);
+
+fetchStocks();
+loadChart('AAPL');
+</script>
+{% endblock %}
